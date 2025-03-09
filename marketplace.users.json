@@ -1,0 +1,22 @@
+[{
+  "_id": {
+    "$oid": "67754aceeddc2adc5748bf67"
+  },
+  "us_name": "Admin User",
+  "us_email": "admin@example.com",
+  "us_password": "$2a$10$DPDyoddEaalHM3VFfvNbjONJChO/P9h6X/YNbgvZwgCp/ljzZRToK",
+  "us_phone_number": "1234567890",
+  "us_address": "123 Admin St, Admin City",
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "677797e0cc5030595476349c"
+  },
+  "us_name": "Richie Damanik",
+  "us_email": "admin222@example.com",
+  "us_password": "$2a$10$ingLdAMliiNRbln6sfbk0.B1rRe1Y7OHTZh6TW/yX.7ReKcHTEruO",
+  "us_phone_number": "081219420841",
+  "us_address": "Gang Sepat 13",
+  "__v": 0
+}]
