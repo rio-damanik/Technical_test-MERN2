@@ -11,18 +11,17 @@ import {
     CircularProgress
 } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getOrder, createOrder, updateOrder, getProducts } from '../../utils/api';
+import { getOrders, createInvoice, getInvoice, updateInvoice } from '../../utils/api';
 
-const OrderForm = () => {
+const InvoiceForm = () => {
     const navigate = useNavigate();
     const { id } = useParams();
-    const [products, setProducts] = useState([]);
+    const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [formData, setFormData] = useState({
-        or_pd_id: '',
-        or_amount: '',
-        or_us_id: 'USR1742026407480' // Default user ID from seeder
+        inv_or_id: '',
+        inv_payment_method: 'cash'
     });
 
     useEffect(() => {
@@ -31,24 +30,23 @@ const OrderForm = () => {
                 setLoading(true);
                 setError('');
 
-                // Fetch products first
-                const productsResponse = await getProducts();
-                if (!productsResponse.data.success) {
-                    throw new Error('Failed to fetch products');
+                // Fetch orders first
+                const ordersResponse = await getOrders();
+                if (!ordersResponse.data.success) {
+                    throw new Error('Failed to fetch orders');
                 }
-                setProducts(productsResponse.data.data);
+                setOrders(ordersResponse.data.data);
 
-                // If editing, fetch order details
+                // If editing, fetch invoice details
                 if (id && id !== 'new') {
-                    const orderResponse = await getOrder(id);
-                    if (!orderResponse.data.success) {
-                        throw new Error('Failed to fetch order details');
+                    const invoiceResponse = await getInvoice(id);
+                    if (!invoiceResponse.data.success) {
+                        throw new Error('Failed to fetch invoice details');
                     }
-                    const orderData = orderResponse.data.data;
+                    const invoiceData = invoiceResponse.data.data;
                     setFormData({
-                        or_pd_id: orderData.or_pd_id._id,
-                        or_amount: orderData.or_amount.toString(),
-                        or_us_id: orderData.or_us_id
+                        inv_or_id: invoiceData.inv_or_id.or_id,
+                        inv_payment_method: invoiceData.inv_payment_method
                     });
                 }
             } catch (error) {
@@ -69,42 +67,32 @@ const OrderForm = () => {
 
         try {
             // Validate form data
-            if (!formData.or_pd_id || !formData.or_amount || !formData.or_us_id) {
+            if (!formData.inv_or_id || !formData.inv_payment_method) {
                 throw new Error('Please fill in all required fields');
             }
 
-            const amount = parseInt(formData.or_amount, 10);
-            if (isNaN(amount) || amount < 1) {
-                throw new Error('Please enter a valid quantity (minimum 1)');
-            }
-
-            const orderData = {
-                ...formData,
-                or_amount: amount
-            };
-
-            const response = id === 'new' 
-                ? await createOrder(orderData)
-                : await updateOrder(id, orderData);
+            const response = id === 'new'
+                ? await createInvoice(formData)
+                : await updateInvoice(id, formData);
 
             if (!response.data.success) {
-                throw new Error(response.data.error || 'Failed to save order');
+                throw new Error(response.data.error || 'Failed to save invoice');
             }
 
-            navigate('/orders');
+            navigate('/invoices');
         } catch (error) {
-            console.error('Error saving order:', error);
-            setError(error.message || 'Failed to save order. Please try again.');
+            console.error('Error saving invoice:', error);
+            setError(error.message || 'Failed to save invoice. Please try again.');
         } finally {
             setLoading(false);
         }
     };
 
     const handleCancel = () => {
-        navigate('/orders');
+        navigate('/invoices');
     };
 
-    if (loading && !products.length) {
+    if (loading && !orders.length) {
         return (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
                 <CircularProgress />
@@ -112,11 +100,18 @@ const OrderForm = () => {
         );
     }
 
+    const formatCurrency = (amount) => {
+        return new Intl.NumberFormat('id-ID', {
+            style: 'currency',
+            currency: 'IDR'
+        }).format(amount);
+    };
+
     return (
         <Container maxWidth="sm">
             <Paper elevation={3} sx={{ p: 4, mt: 4 }}>
                 <Typography variant="h5" gutterBottom>
-                    {id === 'new' ? 'Create Order' : 'Edit Order'}
+                    {id === 'new' ? 'Create Invoice' : 'Edit Invoice'}
                 </Typography>
 
                 {error && (
@@ -131,20 +126,17 @@ const OrderForm = () => {
                         required
                         fullWidth
                         select
-                        label="Product"
-                        name="or_pd_id"
-                        value={formData.or_pd_id}
-                        onChange={(e) => setFormData({ ...formData, or_pd_id: e.target.value })}
-                        error={!formData.or_pd_id}
-                        helperText={!formData.or_pd_id ? 'Please select a product' : ''}
-                        disabled={loading}
+                        label="Order"
+                        name="inv_or_id"
+                        value={formData.inv_or_id}
+                        onChange={(e) => setFormData({ ...formData, inv_or_id: e.target.value })}
+                        error={!formData.inv_or_id}
+                        helperText={!formData.inv_or_id ? 'Please select an order' : ''}
+                        disabled={loading || id !== 'new'}
                     >
-                        {products.map((product) => (
-                            <MenuItem key={product._id} value={product._id}>
-                                {`${product.pd_name} - ${new Intl.NumberFormat('id-ID', {
-                                    style: 'currency',
-                                    currency: 'IDR'
-                                }).format(product.pd_price)}`}
+                        {orders.map((order) => (
+                            <MenuItem key={order.or_id} value={order.or_id}>
+                                {`Order ${order.or_id} - ${order.or_pd_id?.pd_name} (${order.or_amount} units) - ${formatCurrency(order.or_amount * (order.or_pd_id?.pd_price || 0))}`}
                             </MenuItem>
                         ))}
                     </TextField>
@@ -153,19 +145,19 @@ const OrderForm = () => {
                         margin="normal"
                         required
                         fullWidth
-                        label="Quantity"
-                        name="or_amount"
-                        type="number"
-                        inputProps={{ min: 1 }}
-                        value={formData.or_amount}
-                        onChange={(e) => setFormData({ ...formData, or_amount: e.target.value })}
-                        error={!formData.or_amount || parseInt(formData.or_amount, 10) < 1}
-                        helperText={
-                            !formData.or_amount ? 'Please enter quantity' :
-                            parseInt(formData.or_amount, 10) < 1 ? 'Minimum quantity is 1' : ''
-                        }
+                        select
+                        label="Payment Method"
+                        name="inv_payment_method"
+                        value={formData.inv_payment_method}
+                        onChange={(e) => setFormData({ ...formData, inv_payment_method: e.target.value })}
+                        error={!formData.inv_payment_method}
+                        helperText={!formData.inv_payment_method ? 'Please select a payment method' : ''}
                         disabled={loading}
-                    />
+                    >
+                        <MenuItem value="cash">Cash</MenuItem>
+                        <MenuItem value="credit_card">Credit Card</MenuItem>
+                        <MenuItem value="bank_transfer">Bank Transfer</MenuItem>
+                    </TextField>
 
                     <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
                         <Button 
@@ -193,4 +185,4 @@ const OrderForm = () => {
     );
 };
 
-export default OrderForm;
+export default InvoiceForm;

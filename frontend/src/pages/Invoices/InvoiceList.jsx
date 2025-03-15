@@ -11,59 +11,57 @@ import {
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { useNavigate } from 'react-router-dom';
-import { getOrders, deleteOrder } from '../../utils/api';
-import { ShoppingCart as CartIcon } from '@mui/icons-material';
+import { getInvoices, deleteInvoice } from '../../utils/api';
+import { ReceiptLong as InvoiceIcon } from '@mui/icons-material';
 
-const OrderList = () => {
+const InvoiceList = () => {
     const navigate = useNavigate();
-    const [orders, setOrders] = useState([]);
+    const [invoices, setInvoices] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState('');
 
     useEffect(() => {
-        fetchOrders();
+        fetchInvoices();
     }, []);
 
-    const fetchOrders = async () => {
+    const fetchInvoices = async () => {
         try {
             setLoading(true);
-            setError(null);
-            const response = await getOrders();
-            if (response.data.success) {
-                const processedOrders = response.data.data.map(order => ({
-                    id: order.or_id,
-                    ...order,
-                    product_name: order.or_pd_id?.pd_name || 'Unknown Product',
-                    product_price: order.or_pd_id?.pd_price || 0,
-                    total_amount: order.total_amount || (order.or_amount * (order.or_pd_id?.pd_price || 0))
-                }));
-                setOrders(processedOrders);
-            } else {
-                setError('Failed to load orders');
+            setError('');
+            const response = await getInvoices();
+            if (!response.data.success) {
+                throw new Error('Failed to fetch invoices');
             }
+            const processedInvoices = response.data.data.map(invoice => ({
+                id: invoice.inv_id,
+                ...invoice,
+                order_id: invoice.inv_or_id?.or_id || 'Unknown',
+                product_name: invoice.inv_or_id?.or_pd_id?.pd_name || 'Unknown Product',
+                quantity: invoice.inv_or_id?.or_amount || 0
+            }));
+            setInvoices(processedInvoices);
         } catch (error) {
-            console.error('Error fetching orders:', error);
-            setError('Failed to load orders');
+            console.error('Error fetching invoices:', error);
+            setError(error.message || 'Failed to fetch invoices');
         } finally {
             setLoading(false);
         }
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this order? This will also delete any associated invoices.')) {
+        if (!window.confirm('Are you sure you want to delete this invoice?')) {
             return;
         }
         try {
-            setError(null);
-            const response = await deleteOrder(id);
-            if (response.data.success) {
-                fetchOrders();
-            } else {
-                setError('Failed to delete order');
+            setError('');
+            const response = await deleteInvoice(id);
+            if (!response.data.success) {
+                throw new Error('Failed to delete invoice');
             }
+            fetchInvoices();
         } catch (error) {
-            console.error('Error deleting order:', error);
-            setError('Failed to delete order');
+            console.error('Error deleting invoice:', error);
+            setError(error.message || 'Failed to delete invoice');
         }
     };
 
@@ -82,10 +80,23 @@ const OrderList = () => {
         });
     };
 
+    const getStatusColor = (status) => {
+        switch (status) {
+            case 'paid':
+                return 'success';
+            case 'pending':
+                return 'warning';
+            case 'cancelled':
+                return 'error';
+            default:
+                return 'default';
+        }
+    };
+
     const columns = [
-        { 
-            field: 'or_id', 
-            headerName: 'Order ID', 
+        {
+            field: 'inv_id',
+            headerName: 'Invoice ID',
             width: 150,
             renderCell: (params) => (
                 <Chip
@@ -96,15 +107,26 @@ const OrderList = () => {
                 />
             )
         },
-        { 
-            field: 'product_name', 
-            headerName: 'Product', 
-            width: 200,
-            valueGetter: (params) => params.row.or_pd_id?.pd_name || 'Unknown Product'
+        {
+            field: 'order_id',
+            headerName: 'Order ID',
+            width: 150,
+            renderCell: (params) => (
+                <Chip
+                    label={params.value}
+                    variant="outlined"
+                    size="small"
+                />
+            )
         },
-        { 
-            field: 'or_amount', 
-            headerName: 'Quantity', 
+        {
+            field: 'product_name',
+            headerName: 'Product',
+            width: 200
+        },
+        {
+            field: 'quantity',
+            headerName: 'Quantity',
             width: 100,
             align: 'center',
             renderCell: (params) => (
@@ -116,21 +138,44 @@ const OrderList = () => {
             )
         },
         {
-            field: 'product_price',
+            field: 'inv_amount',
             headerName: 'Unit Price',
             width: 150,
-            valueGetter: (params) => params.row.or_pd_id?.pd_price || 0,
             valueFormatter: (params) => formatCurrency(params.value)
         },
         {
-            field: 'total_amount',
+            field: 'inv_total',
             headerName: 'Total Amount',
             width: 150,
             valueFormatter: (params) => formatCurrency(params.value)
         },
         {
-            field: 'or_created_at',
-            headerName: 'Order Date',
+            field: 'inv_status',
+            headerName: 'Status',
+            width: 120,
+            renderCell: (params) => (
+                <Chip
+                    label={params.value}
+                    color={getStatusColor(params.value)}
+                    size="small"
+                />
+            )
+        },
+        {
+            field: 'inv_payment_method',
+            headerName: 'Payment Method',
+            width: 150,
+            valueFormatter: (params) => params.value.replace('_', ' ').toUpperCase()
+        },
+        {
+            field: 'inv_date',
+            headerName: 'Invoice Date',
+            width: 180,
+            valueFormatter: (params) => formatDate(params.value)
+        },
+        {
+            field: 'inv_due_date',
+            headerName: 'Due Date',
             width: 180,
             valueFormatter: (params) => formatDate(params.value)
         },
@@ -143,7 +188,7 @@ const OrderList = () => {
                     <Button
                         variant="contained"
                         size="small"
-                        onClick={() => navigate(`/orders/${params.row.or_id}`)}
+                        onClick={() => navigate(`/invoices/${params.row.inv_id}`)}
                     >
                         Edit
                     </Button>
@@ -151,16 +196,16 @@ const OrderList = () => {
                         variant="contained"
                         color="error"
                         size="small"
-                        onClick={() => handleDelete(params.row.or_id)}
+                        onClick={() => handleDelete(params.row.inv_id)}
                     >
                         Delete
                     </Button>
                 </Box>
-            ),
-        },
+            )
+        }
     ];
 
-    if (loading) {
+    if (loading && !invoices.length) {
         return (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
                 <CircularProgress />
@@ -172,15 +217,15 @@ const OrderList = () => {
         <Container>
             <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <CartIcon sx={{ fontSize: 32, color: 'primary.main' }} />
-                    <Typography variant="h4">Orders</Typography>
+                    <InvoiceIcon sx={{ fontSize: 32, color: 'primary.main' }} />
+                    <Typography variant="h4">Invoices</Typography>
                 </Box>
                 <Button
                     variant="contained"
                     color="primary"
-                    onClick={() => navigate('/orders/new')}
+                    onClick={() => navigate('/invoices/new')}
                 >
-                    Add Order
+                    Create Invoice
                 </Button>
             </Box>
 
@@ -192,7 +237,7 @@ const OrderList = () => {
 
             <Paper sx={{ height: 600, width: '100%' }}>
                 <DataGrid
-                    rows={orders}
+                    rows={invoices}
                     columns={columns}
                     pageSize={10}
                     rowsPerPageOptions={[10, 25, 50]}
@@ -209,4 +254,4 @@ const OrderList = () => {
     );
 };
 
-export default OrderList;
+export default InvoiceList;

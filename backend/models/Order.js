@@ -7,13 +7,18 @@ const orderSchema = new mongoose.Schema({
         unique: true
     },
     or_pd_id: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Product',
+        required: true
+    },
+    or_us_id: {
         type: String,
-        required: true,
-        ref: 'Product'
+        required: true
     },
     or_amount: {
         type: Number,
-        required: true
+        required: true,
+        min: 1
     },
     or_created_at: {
         type: Date,
@@ -25,4 +30,9 @@ const orderSchema = new mongoose.Schema({
     }
 });
 
-module.exports = mongoose.model('Order', orderSchema);
+// Add index for faster queries
+orderSchema.index({ or_id: 1 });
+
+const Order = mongoose.model('Order', orderSchema);
+
+module.exports = Order;

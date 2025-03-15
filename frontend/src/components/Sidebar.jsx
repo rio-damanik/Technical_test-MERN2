@@ -15,6 +15,7 @@ import {
     Category,
     ShoppingCart,
     Assignment,
+    Receipt,
     Logout
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -27,7 +28,8 @@ const Sidebar = () => {
         { text: 'Users', icon: <People />, path: '/users' },
         { text: 'Products', icon: <ShoppingCart />, path: '/products' },
         { text: 'Categories', icon: <Category />, path: '/categories' },
-        { text: 'Orders', icon: <Assignment />, path: '/orders' }
+        { text: 'Orders', icon: <Assignment />, path: '/orders' },
+        { text: 'Invoices', icon: <Receipt />, path: '/invoices' }
     ];
 
     const handleLogout = () => {
