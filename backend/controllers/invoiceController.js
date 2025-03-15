@@ -1,88 +1,6 @@
 const Invoice = require('../models/Invoice');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
-const mongoose = require('mongoose');
-
-// Create new invoice
-exports.createInvoice = async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
-    try {
-        const { inv_or_id, inv_payment_method } = req.body;
-
-        // Get order details with product information
-        const order = await Order.findOne({ or_id: inv_or_id })
-            .populate('or_pd_id');
-
-        if (!order) {
-            await session.abortTransaction();
-            session.endSession();
-            return res.status(404).json({
-                success: false,
-                message: 'Order not found'
-            });
-        }
-
-        if (!order.or_pd_id) {
-            await session.abortTransaction();
-            session.endSession();
-            return res.status(404).json({
-                success: false,
-                message: 'Product not found for this order'
-            });
-        }
-
-        // Calculate total using product price
-        const total = order.or_amount * order.or_pd_id.pd_price;
-
-        // Generate invoice ID
-        const inv_id = 'INV' + Date.now();
-
-        // Set due date to 7 days from now
-        const due_date = new Date();
-        due_date.setDate(due_date.getDate() + 7);
-
-        const invoice = await Invoice.create([{
-            inv_id,
-            inv_or_id: order._id,
-            inv_us_id: order.or_us_id,
-            inv_amount: order.or_pd_id.pd_price,
-            inv_total: total,
-            inv_status: 'pending',
-            inv_payment_method,
-            inv_date: new Date(),
-            inv_due_date: due_date,
-            inv_created_at: new Date(),
-            inv_updated_at: new Date()
-        }], { session });
-
-        await session.commitTransaction();
-        session.endSession();
-
-        // Get the created invoice with populated order details
-        const populatedInvoice = await Invoice.findById(invoice[0]._id)
-            .populate({
-                path: 'inv_or_id',
-                populate: {
-                    path: 'or_pd_id'
-                }
-            });
-
-        res.status(201).json({
-            success: true,
-            data: populatedInvoice
-        });
-    } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
-        console.error('Error creating invoice:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Server error while creating invoice'
-        });
-    }
-};
 
 // Get all invoices
 exports.getAllInvoices = async (req, res) => {
@@ -90,141 +8,137 @@ exports.getAllInvoices = async (req, res) => {
         const invoices = await Invoice.find()
             .populate({
                 path: 'inv_or_id',
-                populate: {
-                    path: 'or_pd_id'
-                }
-            })
-            .sort({ inv_created_at: -1 });
-
-        res.status(200).json({
-            success: true,
-            data: invoices
-        });
+                populate: { path: 'or_pd_id' }
+            });
+        res.json({ success: true, data: invoices });
     } catch (error) {
-        console.error('Error fetching invoices:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Server error while fetching invoices'
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
 // Get single invoice
-exports.getInvoice = async (req, res) => {
+exports.getInvoiceById = async (req, res) => {
     try {
         const invoice = await Invoice.findOne({ inv_id: req.params.id })
             .populate({
                 path: 'inv_or_id',
-                populate: {
-                    path: 'or_pd_id'
-                }
+                populate: { path: 'or_pd_id' }
             });
 
         if (!invoice) {
-            return res.status(404).json({
-                success: false,
-                message: 'Invoice not found'
-            });
+            return res.status(404).json({ success: false, message: 'Invoice not found' });
         }
 
-        res.status(200).json({
-            success: true,
-            data: invoice
-        });
+        res.json({ success: true, data: invoice });
     } catch (error) {
-        console.error('Error fetching invoice:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Server error while fetching invoice'
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// Create new invoice
+exports.createInvoice = async (req, res) => {
+    try {
+        const { inv_or_id, inv_payment_method } = req.body;
+
+        // Find order by or_id
+        const order = await Order.findOne({ or_id: inv_or_id }).populate('or_pd_id');
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'Order not found' });
+        }
+
+        // Check if invoice already exists for this order
+        const existingInvoice = await Invoice.findOne({ inv_or_id: order._id });
+        if (existingInvoice) {
+            return res.status(400).json({ success: false, message: 'Invoice already exists for this order' });
+        }
+
+        // Calculate total amount
+        const inv_amount = order.or_pd_id.pd_price;
+        const inv_total = inv_amount * order.or_amount;
+
+        // Set due date to 7 days from now
+        const inv_due_date = new Date();
+        inv_due_date.setDate(inv_due_date.getDate() + 7);
+
+        const invoice = await Invoice.create({
+            inv_id: 'INV' + Date.now(),
+            inv_or_id: order._id,
+            inv_us_id: order.or_us_id,
+            inv_amount,
+            inv_total,
+            inv_status: 'pending',
+            inv_payment_method,
+            inv_date: new Date(),
+            inv_due_date
         });
+
+        const populatedInvoice = await Invoice.findById(invoice._id)
+            .populate({
+                path: 'inv_or_id',
+                populate: { path: 'or_pd_id' }
+            });
+
+        res.status(201).json({ success: true, data: populatedInvoice });
+    } catch (error) {
+        console.error('Error creating invoice:', error);
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
 // Update invoice
 exports.updateInvoice = async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
     try {
-        const invoice = await Invoice.findOneAndUpdate(
-            { inv_id: req.params.id },
-            {
-                ...req.body,
-                inv_updated_at: new Date()
-            },
-            {
-                new: true,
-                runValidators: true,
-                session
-            }
-        ).populate({
-            path: 'inv_or_id',
-            populate: {
-                path: 'or_pd_id'
-            }
-        });
+        const { inv_status, inv_payment_method } = req.body;
+        const inv_id = req.params.id;
 
+        // Find invoice
+        const invoice = await Invoice.findOne({ inv_id });
         if (!invoice) {
-            await session.abortTransaction();
-            session.endSession();
-            return res.status(404).json({
-                success: false,
-                message: 'Invoice not found'
-            });
+            return res.status(404).json({ success: false, message: 'Invoice not found' });
         }
 
-        await session.commitTransaction();
-        session.endSession();
+        // Update only allowed fields
+        if (inv_status) {
+            if (!['pending', 'paid', 'cancelled'].includes(inv_status)) {
+                return res.status(400).json({ success: false, message: 'Invalid invoice status' });
+            }
+            invoice.inv_status = inv_status;
+        }
 
-        res.status(200).json({
-            success: true,
-            data: invoice
-        });
+        if (inv_payment_method) {
+            if (!['cash', 'credit_card', 'bank_transfer'].includes(inv_payment_method)) {
+                return res.status(400).json({ success: false, message: 'Invalid payment method' });
+            }
+            invoice.inv_payment_method = inv_payment_method;
+        }
+
+        await invoice.save();
+
+        const updatedInvoice = await Invoice.findById(invoice._id)
+            .populate({
+                path: 'inv_or_id',
+                populate: { path: 'or_pd_id' }
+            });
+
+        res.json({ success: true, data: updatedInvoice });
     } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
-        console.error('Error updating invoice:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Server error while updating invoice'
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
 // Delete invoice
 exports.deleteInvoice = async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
     try {
-        const invoice = await Invoice.findOneAndDelete(
-            { inv_id: req.params.id },
-            { session }
-        );
+        const inv_id = req.params.id;
 
+        const invoice = await Invoice.findOne({ inv_id });
         if (!invoice) {
-            await session.abortTransaction();
-            session.endSession();
-            return res.status(404).json({
-                success: false,
-                message: 'Invoice not found'
-            });
+            return res.status(404).json({ success: false, message: 'Invoice not found' });
         }
 
-        await session.commitTransaction();
-        session.endSession();
-
-        res.status(200).json({
-            success: true,
-            message: 'Invoice deleted successfully'
-        });
+        await invoice.deleteOne();
+        res.json({ success: true, message: 'Invoice deleted successfully' });
     } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
-        console.error('Error deleting invoice:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Server error while deleting invoice'
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 };

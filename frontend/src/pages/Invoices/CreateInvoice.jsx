@@ -10,7 +10,10 @@ import {
     Paper,
     Stack,
     Alert,
-    CircularProgress
+    CircularProgress,
+    Card,
+    CardContent,
+    Grid
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { Save as SaveIcon } from '@mui/icons-material';
@@ -21,6 +24,7 @@ const CreateInvoice = () => {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [selectedOrder, setSelectedOrder] = useState(null);
     const [formData, setFormData] = useState({
         inv_or_id: '',
         inv_payment_method: 'bank_transfer'
@@ -32,36 +36,58 @@ const CreateInvoice = () => {
 
     const fetchOrders = async () => {
         try {
+            setLoading(true);
             const response = await getOrders();
-            // Filter out orders that already have invoices
-            const ordersWithoutInvoices = response.data.data;
-            setOrders(ordersWithoutInvoices);
+            setOrders(response.data.data);
             setError('');
         } catch (error) {
             setError('Failed to fetch orders. Please try again later.');
             console.error('Error fetching orders:', error);
+        } finally {
+            setLoading(false);
         }
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!formData.inv_or_id) {
+            setError('Please select an order');
+            return;
+        }
+        
         setLoading(true);
         try {
             await createInvoice(formData);
             navigate('/invoices');
         } catch (error) {
-            setError('Failed to create invoice. Please try again.');
+            setError(error.error || 'Failed to create invoice. Please try again.');
             console.error('Error creating invoice:', error);
         } finally {
             setLoading(false);
         }
     };
 
-    const handleChange = (e) => {
+    const handleOrderChange = (e) => {
+        const orderId = e.target.value;
         setFormData({
             ...formData,
-            [e.target.name]: e.target.value
+            inv_or_id: orderId
         });
+        setSelectedOrder(orders.find(order => order.or_id === orderId));
+    };
+
+    const handlePaymentMethodChange = (e) => {
+        setFormData({
+            ...formData,
+            inv_payment_method: e.target.value
+        });
+    };
+
+    const formatCurrency = (amount) => {
+        return new Intl.NumberFormat('id-ID', {
+            style: 'currency',
+            currency: 'IDR'
+        }).format(amount);
     };
 
     const paymentMethods = [
@@ -79,7 +105,7 @@ const CreateInvoice = () => {
                     </Typography>
 
                     {error && (
-                        <Alert severity="error">
+                        <Alert severity="error" onClose={() => setError('')}>
                             {error}
                         </Alert>
                     )}
@@ -91,24 +117,70 @@ const CreateInvoice = () => {
                                 <Select
                                     name="inv_or_id"
                                     value={formData.inv_or_id}
-                                    onChange={handleChange}
+                                    onChange={handleOrderChange}
                                     required
                                     disabled={loading}
                                 >
                                     {orders.map((order) => (
                                         <MenuItem key={order.or_id} value={order.or_id}>
-                                            Order #{order.or_id} - Amount: {order.or_amount}
+                                            Order #{order.or_id} - {order.or_pd_id.pd_name}
                                         </MenuItem>
                                     ))}
                                 </Select>
                             </FormControl>
+
+                            {selectedOrder && (
+                                <Card variant="outlined">
+                                    <CardContent>
+                                        <Grid container spacing={2}>
+                                            <Grid item xs={12}>
+                                                <Typography variant="h6" gutterBottom>
+                                                    Order Details
+                                                </Typography>
+                                            </Grid>
+                                            <Grid item xs={12} sm={6}>
+                                                <Typography variant="subtitle2" color="text.secondary">
+                                                    Product
+                                                </Typography>
+                                                <Typography variant="body1">
+                                                    {selectedOrder.or_pd_id.pd_name}
+                                                </Typography>
+                                            </Grid>
+                                            <Grid item xs={12} sm={6}>
+                                                <Typography variant="subtitle2" color="text.secondary">
+                                                    Price
+                                                </Typography>
+                                                <Typography variant="body1">
+                                                    {formatCurrency(selectedOrder.or_pd_id.pd_price)}
+                                                </Typography>
+                                            </Grid>
+                                            <Grid item xs={12} sm={6}>
+                                                <Typography variant="subtitle2" color="text.secondary">
+                                                    Quantity
+                                                </Typography>
+                                                <Typography variant="body1">
+                                                    {selectedOrder.or_amount}
+                                                </Typography>
+                                            </Grid>
+                                            <Grid item xs={12} sm={6}>
+                                                <Typography variant="subtitle2" color="text.secondary">
+                                                    Total Amount
+                                                </Typography>
+                                                <Typography variant="body1" color="primary.main">
+                                                    {formatCurrency(selectedOrder.or_pd_id.pd_price * selectedOrder.or_amount)}
+                                                </Typography>
+                                            </Grid>
+                                        </Grid>
+                                    </CardContent>
+                                </Card>
+                            )}
 
                             <FormControl fullWidth>
                                 <InputLabel>Payment Method</InputLabel>
                                 <Select
                                     name="inv_payment_method"
                                     value={formData.inv_payment_method}
-                                    onChange={handleChange}
+                                    onChange={handlePaymentMethodChange}
                                     required
                                     disabled={loading}
                                 >
@@ -124,7 +196,7 @@ const CreateInvoice = () => {
                                 type="submit"
                                 variant="contained"
                                 color="primary"
-                                disabled={loading}
+                                disabled={loading || !formData.inv_or_id}
                                 startIcon={loading ? <CircularProgress size={20} /> : <SaveIcon />}
                             >
                                 {loading ? 'Creating...' : 'Create Invoice'}

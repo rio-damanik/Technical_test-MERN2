@@ -8,26 +8,33 @@ const invoiceSchema = new mongoose.Schema({
     },
     inv_or_id: {
         type: mongoose.Schema.Types.ObjectId,
-        required: true,
-        ref: 'Order'
+        ref: 'Order',
+        required: true
     },
     inv_us_id: {
         type: String,
-        required: true,
-        ref: 'User'
+        required: true
     },
     inv_amount: {
         type: Number,
-        required: true
+        required: true,
+        min: 0
     },
     inv_total: {
         type: Number,
-        required: true
+        required: true,
+        min: 0
     },
     inv_status: {
         type: String,
+        required: true,
         enum: ['pending', 'paid', 'cancelled'],
         default: 'pending'
+    },
+    inv_payment_method: {
+        type: String,
+        required: true,
+        enum: ['cash', 'credit_card', 'bank_transfer']
     },
     inv_date: {
         type: Date,
@@ -36,23 +43,13 @@ const invoiceSchema = new mongoose.Schema({
     inv_due_date: {
         type: Date,
         required: true
-    },
-    inv_payment_method: {
-        type: String,
-        enum: ['cash', 'credit_card', 'bank_transfer'],
-        required: true
-    },
-    inv_created_at: {
-        type: Date,
-        default: Date.now
-    },
-    inv_updated_at: {
-        type: Date,
-        default: Date.now
     }
-}, {
-    timestamps: true
 });
+
+// Add index for faster queries
+invoiceSchema.index({ inv_id: 1 });
+invoiceSchema.index({ inv_or_id: 1 });
+invoiceSchema.index({ inv_status: 1 });
 
 const Invoice = mongoose.model('Invoice', invoiceSchema);
 
