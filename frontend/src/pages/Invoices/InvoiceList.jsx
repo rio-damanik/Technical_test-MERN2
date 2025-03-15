@@ -1,24 +1,49 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Container,
-    Paper,
-    Button,
-    Typography,
     Box,
-    Chip,
+    Button,
+    Paper,
+    Table,
+    TableBody,
+    TableCell,
+    TableContainer,
+    TableHead,
+    TableRow,
+    Typography,
+    IconButton,
+    Stack,
     Alert,
-    CircularProgress
+    CircularProgress,
+    ButtonGroup,
+    Chip,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogContentText,
+    DialogActions,
+    Card,
+    CardContent,
+    Grid,
+    Tooltip
 } from '@mui/material';
-import { DataGrid } from '@mui/x-data-grid';
+import {
+    Add as AddIcon,
+    Delete as DeleteIcon,
+    Edit as EditIcon,
+    CheckCircle as CheckCircleIcon,
+    Cancel as CancelIcon,
+    Pending as PendingIcon
+} from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { getInvoices, deleteInvoice } from '../../utils/api';
-import { ReceiptLong as InvoiceIcon } from '@mui/icons-material';
+import { getInvoices, deleteInvoice, updateInvoice } from '../../utils/api';
 
 const InvoiceList = () => {
     const navigate = useNavigate();
     const [invoices, setInvoices] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [selectedInvoice, setSelectedInvoice] = useState(null);
 
     useEffect(() => {
         fetchInvoices();
@@ -27,41 +52,44 @@ const InvoiceList = () => {
     const fetchInvoices = async () => {
         try {
             setLoading(true);
-            setError('');
             const response = await getInvoices();
-            if (!response.data.success) {
-                throw new Error('Failed to fetch invoices');
-            }
-            const processedInvoices = response.data.data.map(invoice => ({
-                id: invoice.inv_id,
-                ...invoice,
-                order_id: invoice.inv_or_id?.or_id || 'Unknown',
-                product_name: invoice.inv_or_id?.or_pd_id?.pd_name || 'Unknown Product',
-                quantity: invoice.inv_or_id?.or_amount || 0
-            }));
-            setInvoices(processedInvoices);
+            setInvoices(response.data.data);
+            setError('');
         } catch (error) {
+            setError('Failed to fetch invoices. Please try again later.');
             console.error('Error fetching invoices:', error);
-            setError(error.message || 'Failed to fetch invoices');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleDelete = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this invoice?')) {
-            return;
-        }
+    const handleDelete = async () => {
+        if (!selectedInvoice) return;
+        
         try {
-            setError('');
-            const response = await deleteInvoice(id);
-            if (!response.data.success) {
-                throw new Error('Failed to delete invoice');
-            }
-            fetchInvoices();
+            setLoading(true);
+            await deleteInvoice(selectedInvoice.inv_id);
+            await fetchInvoices();
+            setDeleteDialogOpen(false);
+            setSelectedInvoice(null);
         } catch (error) {
+            setError('Failed to delete invoice. Please try again.');
             console.error('Error deleting invoice:', error);
-            setError(error.message || 'Failed to delete invoice');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleStatusChange = async (invoice, newStatus) => {
+        try {
+            setLoading(true);
+            await updateInvoice(invoice.inv_id, { inv_status: newStatus });
+            await fetchInvoices();
+        } catch (error) {
+            setError('Failed to update invoice status. Please try again.');
+            console.error('Error updating invoice status:', error);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -73,10 +101,10 @@ const InvoiceList = () => {
     };
 
     const formatDate = (dateString) => {
-        if (!dateString) return '';
-        return new Date(dateString).toLocaleString('id-ID', {
-            dateStyle: 'medium',
-            timeStyle: 'short'
+        return new Date(dateString).toLocaleDateString('id-ID', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
         });
     };
 
@@ -93,164 +121,164 @@ const InvoiceList = () => {
         }
     };
 
-    const columns = [
-        {
-            field: 'inv_id',
-            headerName: 'Invoice ID',
-            width: 150,
-            renderCell: (params) => (
-                <Chip
-                    label={params.value}
-                    color="primary"
-                    variant="outlined"
-                    size="small"
-                />
-            )
-        },
-        {
-            field: 'order_id',
-            headerName: 'Order ID',
-            width: 150,
-            renderCell: (params) => (
-                <Chip
-                    label={params.value}
-                    variant="outlined"
-                    size="small"
-                />
-            )
-        },
-        {
-            field: 'product_name',
-            headerName: 'Product',
-            width: 200
-        },
-        {
-            field: 'quantity',
-            headerName: 'Quantity',
-            width: 100,
-            align: 'center',
-            renderCell: (params) => (
-                <Chip
-                    label={params.value}
-                    color="secondary"
-                    size="small"
-                />
-            )
-        },
-        {
-            field: 'inv_amount',
-            headerName: 'Unit Price',
-            width: 150,
-            valueFormatter: (params) => formatCurrency(params.value)
-        },
-        {
-            field: 'inv_total',
-            headerName: 'Total Amount',
-            width: 150,
-            valueFormatter: (params) => formatCurrency(params.value)
-        },
-        {
-            field: 'inv_status',
-            headerName: 'Status',
-            width: 120,
-            renderCell: (params) => (
-                <Chip
-                    label={params.value}
-                    color={getStatusColor(params.value)}
-                    size="small"
-                />
-            )
-        },
-        {
-            field: 'inv_payment_method',
-            headerName: 'Payment Method',
-            width: 150,
-            valueFormatter: (params) => params.value.replace('_', ' ').toUpperCase()
-        },
-        {
-            field: 'inv_date',
-            headerName: 'Invoice Date',
-            width: 180,
-            valueFormatter: (params) => formatDate(params.value)
-        },
-        {
-            field: 'inv_due_date',
-            headerName: 'Due Date',
-            width: 180,
-            valueFormatter: (params) => formatDate(params.value)
-        },
-        {
-            field: 'actions',
-            headerName: 'Actions',
-            width: 200,
-            renderCell: (params) => (
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Button
-                        variant="contained"
-                        size="small"
-                        onClick={() => navigate(`/invoices/${params.row.inv_id}`)}
-                    >
-                        Edit
-                    </Button>
-                    <Button
-                        variant="contained"
-                        color="error"
-                        size="small"
-                        onClick={() => handleDelete(params.row.inv_id)}
-                    >
-                        Delete
-                    </Button>
-                </Box>
-            )
-        }
-    ];
-
-    if (loading && !invoices.length) {
+    const renderStatusButtons = (invoice) => {
+        const statuses = ['pending', 'paid', 'cancelled'];
         return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-                <CircularProgress />
-            </Box>
+            <ButtonGroup size="small" variant="outlined">
+                {statuses.map((status) => (
+                    <Button
+                        key={status}
+                        onClick={() => handleStatusChange(invoice, status)}
+                        variant={invoice.inv_status === status ? "contained" : "outlined"}
+                        color={getStatusColor(status)}
+                        disabled={loading || invoice.inv_status === status}
+                        startIcon={
+                            status === 'paid' ? <CheckCircleIcon /> :
+                            status === 'pending' ? <PendingIcon /> :
+                            <CancelIcon />
+                        }
+                        sx={{ textTransform: 'capitalize' }}
+                    >
+                        {status}
+                    </Button>
+                ))}
+            </ButtonGroup>
         );
-    }
+    };
 
     return (
-        <Container>
-            <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <InvoiceIcon sx={{ fontSize: 32, color: 'primary.main' }} />
-                    <Typography variant="h4">Invoices</Typography>
-                </Box>
-                <Button
-                    variant="contained"
-                    color="primary"
-                    onClick={() => navigate('/invoices/new')}
+        <Box sx={{ p: 3 }}>
+            <Stack spacing={3}>
+                <Stack
+                    direction="row"
+                    justifyContent="space-between"
+                    alignItems="center"
                 >
-                    Create Invoice
-                </Button>
-            </Box>
+                    <Typography variant="h4">
+                        Invoices
+                    </Typography>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        startIcon={<AddIcon />}
+                        onClick={() => navigate('/invoices/create')}
+                    >
+                        Create Invoice
+                    </Button>
+                </Stack>
 
-            {error && (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                    {error}
-                </Alert>
-            )}
+                {error && (
+                    <Alert severity="error" onClose={() => setError('')}>
+                        {error}
+                    </Alert>
+                )}
 
-            <Paper sx={{ height: 600, width: '100%' }}>
-                <DataGrid
-                    rows={invoices}
-                    columns={columns}
-                    pageSize={10}
-                    rowsPerPageOptions={[10, 25, 50]}
-                    disableSelectionOnClick
-                    loading={loading}
-                    sx={{
-                        '& .MuiDataGrid-cell': {
-                            fontSize: '0.875rem'
-                        }
-                    }}
-                />
-            </Paper>
-        </Container>
+                {loading && !invoices.length && (
+                    <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                        <CircularProgress />
+                    </Box>
+                )}
+
+                <TableContainer component={Paper}>
+                    <Table>
+                        <TableHead>
+                            <TableRow>
+                                <TableCell>Invoice ID</TableCell>
+                                <TableCell>Product</TableCell>
+                                <TableCell>Amount</TableCell>
+                                <TableCell>Total</TableCell>
+                                <TableCell>Status</TableCell>
+                                <TableCell>Payment Method</TableCell>
+                                <TableCell>Due Date</TableCell>
+                                <TableCell align="center">Actions</TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {invoices.map((invoice) => (
+                                <TableRow key={invoice.inv_id}>
+                                    <TableCell>{invoice.inv_id}</TableCell>
+                                    <TableCell>
+                                        {invoice.inv_or_id?.or_pd_id?.pd_name || 'N/A'}
+                                    </TableCell>
+                                    <TableCell>
+                                        {formatCurrency(invoice.inv_amount)}
+                                    </TableCell>
+                                    <TableCell>
+                                        {formatCurrency(invoice.inv_total)}
+                                    </TableCell>
+                                    <TableCell>
+                                        {renderStatusButtons(invoice)}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Chip
+                                            label={invoice.inv_payment_method.replace('_', ' ').toUpperCase()}
+                                            color="primary"
+                                            variant="outlined"
+                                        />
+                                    </TableCell>
+                                    <TableCell>
+                                        {formatDate(invoice.inv_due_date)}
+                                    </TableCell>
+                                    <TableCell align="center">
+                                        <Stack direction="row" spacing={1} justifyContent="center">
+                                            <Tooltip title="Edit Invoice">
+                                                <IconButton
+                                                    color="primary"
+                                                    onClick={() => navigate(`/invoices/${invoice.inv_id}/edit`)}
+                                                >
+                                                    <EditIcon />
+                                                </IconButton>
+                                            </Tooltip>
+                                            <Tooltip title="Delete Invoice">
+                                                <IconButton
+                                                    color="error"
+                                                    onClick={() => {
+                                                        setSelectedInvoice(invoice);
+                                                        setDeleteDialogOpen(true);
+                                                    }}
+                                                >
+                                                    <DeleteIcon />
+                                                </IconButton>
+                                            </Tooltip>
+                                        </Stack>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+
+                {/* Delete Confirmation Dialog */}
+                <Dialog
+                    open={deleteDialogOpen}
+                    onClose={() => setDeleteDialogOpen(false)}
+                >
+                    <DialogTitle>Delete Invoice</DialogTitle>
+                    <DialogContent>
+                        <DialogContentText>
+                            Are you sure you want to delete invoice {selectedInvoice?.inv_id}?
+                            This action cannot be undone.
+                        </DialogContentText>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button
+                            onClick={() => setDeleteDialogOpen(false)}
+                            disabled={loading}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleDelete}
+                            color="error"
+                            disabled={loading}
+                            startIcon={loading ? <CircularProgress size={20} /> : <DeleteIcon />}
+                        >
+                            {loading ? 'Deleting...' : 'Delete'}
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+            </Stack>
+        </Box>
     );
 };
 

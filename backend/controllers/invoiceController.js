@@ -106,7 +106,7 @@ exports.updateInvoice = async (req, res) => {
         }
 
         if (inv_payment_method) {
-            if (!['cash', 'credit_card', 'bank_transfer'].includes(inv_payment_method)) {
+            if (!['cash', 'credit_card', 'debit_card', 'bank_transfer'].includes(inv_payment_method)) {
                 return res.status(400).json({ success: false, message: 'Invalid payment method' });
             }
             invoice.inv_payment_method = inv_payment_method;
